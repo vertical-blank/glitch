@@ -43,7 +43,7 @@ import org.eclipse.jgit.treewalk.filter.PathFilter;
  * 
  * @author yohei224
  */
-class GitRepository {
+public class GitRepository {
   
   private static final String MASTER = "master";
   
