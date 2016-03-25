@@ -149,7 +149,7 @@ public class GitRepository {
   }
   
   /** Branch */
-  class Branch {
+  public class Branch {
     
     private final Repository repo = GitRepository.this.repo;
     
@@ -411,7 +411,7 @@ public class GitRepository {
     /**
      * Wrapper of RevCommit.
      */
-    class Commit {
+    public class Commit {
       
       private final Repository repo = Branch.this.repo;
       
@@ -421,7 +421,7 @@ public class GitRepository {
        * Constructor
        * @param rev
        */
-      Commit(RevCommit rev){
+      public Commit(RevCommit rev){
         this.rev = rev;
       }
       
@@ -554,11 +554,11 @@ public class GitRepository {
   }
   
   /** Ident */
-  static class Ident {
+  public static class Ident {
     private String name;
     private String mail;
     
-    Ident(String name, String mail) {
+    public Ident(String name, String mail) {
       this.name = name;
       this.mail = mail;
     }
@@ -570,17 +570,17 @@ public class GitRepository {
   }
   
   /** Direcotry object for commting */
-  static class Dir {
+  public static class Dir {
     final String name;
     
     public Map<String, Dir>  dirs  = new TreeMap<String, Dir>();
     public Map<String, Blob> files = new TreeMap<String, Blob>();
     
-    Dir(){
+    public Dir(){
       this.name = "root";
     }
     
-    Dir(String name) {
+    public Dir(String name) {
       this.name = name;
     }
     
@@ -614,14 +614,14 @@ public class GitRepository {
   }
   
   /** Blob as file entry */
-  static class Blob {
+  public static class Blob {
     final ObjectLoader loader;
     
-    Blob(ObjectLoader loader) {
+    public Blob(ObjectLoader loader) {
       this.loader = loader;
     }
     
-    Blob(byte[] bytes) {
+    public Blob(byte[] bytes) {
       this.loader = new SmallObject(Constants.OBJ_BLOB, bytes);
     }
     
