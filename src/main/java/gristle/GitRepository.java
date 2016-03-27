@@ -22,13 +22,13 @@ import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectInserter;
 import org.eclipse.jgit.lib.ObjectLoader;
-import org.eclipse.jgit.lib.RepositoryBuilder;
 import org.eclipse.jgit.lib.ObjectLoader.SmallObject;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.RefUpdate.Result;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.lib.RepositoryBuilder;
 import org.eclipse.jgit.lib.TreeFormatter;
 import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.merge.Merger;
@@ -50,28 +50,16 @@ public class GitRepository {
   
   /** Repository */
   private Repository repo;
-  /** Ident */
-  private Ident ident;
   
   /**
    * Constructor
    * @param dir git workdirectory
    * @throws IOException
    */
-  public GitRepository(File dir) throws IOException {
-    this(dir, null);
-  }
-  /**
-   * Constructor
-   * @param dir git workdirectory
-   * @param ident 
-   * @throws IOException
-   */
-  public GitRepository(File dir, Ident ident) throws IOException {
+  private GitRepository(File dir) throws IOException {
     this.repo = new FileRepositoryBuilder()
                 .setMustExist(true)
                 .setGitDir(dir).build();
-    this.ident = ident;
   }
   
   /**
@@ -80,13 +68,21 @@ public class GitRepository {
    * @return
    * @throws IOException
    */
-  public static GitRepository create(File dir) throws IOException {
+  public static GitRepository getInstance(File dir) throws IOException {
     RepositoryBuilder builder = new RepositoryBuilder();
     builder.setBare();
     builder.setGitDir(dir);
-    builder.build();
+    Repository repo = builder.build();
+    
+    if (!repo.getObjectDatabase().exists()){
+      repo.create(true);
+    }
     
     return new GitRepository(dir);
+  }
+
+  public File getDirectory() {
+    return this.repo.getDirectory();
   }
   
   /**
@@ -101,11 +97,12 @@ public class GitRepository {
    * @param filename
    * @param filecontent
    * @param comment
+   * @param ident 
    * @return
    * @throws IOException
    */
-  public GitRepository initialize(String filename, byte[] filecontent, String comment) throws IOException {
-    return this.initialize(MASTER, filename, filecontent, comment);
+  public GitRepository initialize(String filename, byte[] filecontent, String comment, Ident ident) throws IOException {
+    return this.initialize(MASTER, filename, filecontent, comment, ident);
   }
   
   /**
@@ -114,36 +111,39 @@ public class GitRepository {
    * @param filename
    * @param filecontent
    * @param comment
+   * @param ident 
    * @return
    * @throws IOException
    */
-  public GitRepository initialize(String mastername, String filename, byte[] filecontent, String comment) throws IOException {
+  public GitRepository initialize(String mastername, String filename, byte[] filecontent, String comment, Ident ident) throws IOException {
     Branch master = this.branch(mastername);
     Dir root = new Dir().put(filename, filecontent);
-    master.commit(root, comment);
+    master.commit(root, comment, ident);
     return this;
   }
   
   /**
    * Initialize master branch as blank
    * @param comment
+   * @param ident 
    * @return
    * @throws IOException
    */
-  public GitRepository initialize(String comment) throws IOException {
-    return this.initialize(MASTER, comment);
+  public GitRepository initialize(String comment, Ident ident) throws IOException {
+    return this.initialize(MASTER, comment, ident);
   }
   
   /**
    * Initialize branch as blank
    * @param mastername
    * @param comment
+   * @param ident 
    * @return
    * @throws IOException
    */
-  public GitRepository initialize(String mastername, String comment) throws IOException {
+  public GitRepository initialize(String mastername, String comment, Ident ident) throws IOException {
     Branch master = this.branch(mastername);
-    master.commit(new Dir(), comment);
+    master.commit(new Dir(), comment, ident);
     return this;
   }
   
@@ -176,8 +176,6 @@ public class GitRepository {
   public class Branch {
     
     private final Repository repo = GitRepository.this.repo;
-    
-    private final Ident ident = GitRepository.this.ident;
     
     /** name */
     public final String name;
@@ -285,11 +283,12 @@ public class GitRepository {
      * Execute commit to this branch. 
      * @param add
      * @param message
+     * @param ident 
      * @return
      * @throws IOException
      */
-    public Result commit(Dir add, String message) throws IOException {
-      return commit(add, new Dir(), message);
+    public Result commit(Dir add, String message, Ident ident) throws IOException {
+      return commit(add, new Dir(), message, ident);
     }
     
     /**
@@ -297,10 +296,13 @@ public class GitRepository {
      * @param add
      * @param rm
      * @param message commit message
+     * @param ident 
      * @return
      * @throws IOException
      */
-    public Result commit(Dir add, Dir rm, String message) throws IOException {
+    public Result commit(Dir add, Dir rm, String message, Ident ident) throws IOException {
+      PersonIdent personIdent = ident.toPersonIdent();
+      
       try (ObjectInserter inserter = this.repo.newObjectInserter()) {
         TreeFormatter formatter = formatDir(add, inserter);
         ObjectId treeId = inserter.insert(formatter);
@@ -309,8 +311,8 @@ public class GitRepository {
         List<ObjectId> parentIds = head != null ? Arrays.asList(head.getId()) : Collections.<ObjectId>emptyList();
         
         CommitBuilder newCommit = new CommitBuilder();
-        newCommit.setCommitter(this.ident.toPersonIdent());
-        newCommit.setAuthor(this.ident.toPersonIdent());
+        newCommit.setCommitter(personIdent);
+        newCommit.setAuthor(personIdent);
         newCommit.setMessage(message);
         newCommit.setParentIds(parentIds);
         newCommit.setTreeId(treeId);
@@ -361,21 +363,24 @@ public class GitRepository {
     /**
      * Merge this branch into another one, and then delete this.
      * @param toBranch
+     * @param ident 
      * @return
      * @throws IOException
      */
-    public boolean mergeTo(Branch toBranch) throws IOException {
-      return mergeTo(toBranch, false);
+    public boolean mergeTo(Branch toBranch, Ident ident) throws IOException {
+      return mergeTo(toBranch, false, ident);
     }
     
     /**
      * Merge this branch into another one.
      * @param toBranch
      * @param delete
+     * @param ident 
      * @return
      * @throws IOException
      */
-    public boolean mergeTo(Branch toBranch, boolean delete) throws IOException {
+    public boolean mergeTo(Branch toBranch, boolean delete, Ident ident) throws IOException {
+      PersonIdent personIdent = ident.toPersonIdent();
       ObjectInserter inserter = this.repo.newObjectInserter();
       
       try (RevWalk revWalk = new RevWalk(this.repo)) {
@@ -387,7 +392,7 @@ public class GitRepository {
         this.repo.writeMergeCommitMsg("mergeMessage");
         this.repo.writeMergeHeads(Arrays.asList(this.repo.exactRef(Constants.HEAD).getObjectId()));
         
-        Merger merger = MergeStrategy.RECURSIVE.newMerger(this.repo);
+        Merger merger = MergeStrategy.RECURSIVE.newMerger(this.repo, true);
         boolean merge = merger.merge(srcCommit, toCommit);
         if (!merge){
           return false;
@@ -396,8 +401,8 @@ public class GitRepository {
         ObjectId mergeResultTreeId = merger.getResultTreeId();
         
         CommitBuilder newCommit = new CommitBuilder();
-        newCommit.setCommitter(this.ident.toPersonIdent());
-        newCommit.setAuthor(this.ident.toPersonIdent());
+        newCommit.setCommitter(personIdent);
+        newCommit.setAuthor(personIdent);
         newCommit.setMessage("merge commit message");
         newCommit.setParentIds(toCommit.getId(), srcCommit.getId());
         newCommit.setTreeId(mergeResultTreeId);
