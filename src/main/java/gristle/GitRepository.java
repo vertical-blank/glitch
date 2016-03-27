@@ -22,6 +22,7 @@ import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectInserter;
 import org.eclipse.jgit.lib.ObjectLoader;
+import org.eclipse.jgit.lib.RepositoryBuilder;
 import org.eclipse.jgit.lib.ObjectLoader.SmallObject;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.Ref;
@@ -55,6 +56,14 @@ public class GitRepository {
   /**
    * Constructor
    * @param dir git workdirectory
+   * @throws IOException
+   */
+  public GitRepository(File dir) throws IOException {
+    this(dir, null);
+  }
+  /**
+   * Constructor
+   * @param dir git workdirectory
    * @param ident 
    * @throws IOException
    */
@@ -63,6 +72,21 @@ public class GitRepository {
                 .setMustExist(true)
                 .setGitDir(dir).build();
     this.ident = ident;
+  }
+  
+  /**
+   * Create and init git bare-repository
+   * @param dir
+   * @return
+   * @throws IOException
+   */
+  public static GitRepository create(File dir) throws IOException {
+    RepositoryBuilder builder = new RepositoryBuilder();
+    builder.setBare();
+    builder.setGitDir(dir);
+    builder.build();
+    
+    return new GitRepository(dir);
   }
   
   /**
