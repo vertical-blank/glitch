@@ -1,20 +1,21 @@
 package gristle;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import gristle.GitRepository.Branch;
 import gristle.GitRepository.Dir;
 import gristle.GitRepository.Ident;
+import gristle.GitRepository.Tag;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.junit.Test;
@@ -201,24 +202,27 @@ public class RepositoryTest {
   }
   
   @Test
-  public void commitAndMergeConf() throws Exception {
-    GitRepository repo = prepareGit("commitAndMergeConf.git").initialize("README.md", "initial\r\ncommit".getBytes(), "initial commit", ident);
+  public void tags() throws Exception {
+    GitRepository repo = prepareGit("tags.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
     
     Branch master  = repo.branch("master");
+    Thread.sleep(1000);
     
-    Branch develop = master.createNewBranch("develop");
+    master.commit(new Dir().put("README.md", "first".getBytes()), "first commit", ident).addTag("ZZZZ", "ZZZZ", ident);
+    Thread.sleep(1000);
     
-    String updateContent = "initial\r\ncommit\r\nadded";
-    develop.commit(new Dir().put("README.md", updateContent.getBytes()), "dev commit", ident);
-    assertArrayEquals(develop.head().getDir().file("README.md").bytes(), updateContent.getBytes());
+    master.commit(new Dir().put("README.md", "second".getBytes()), "second commit", ident);
+    Thread.sleep(1000);
     
-    String masterContent = "updated\r\ncommit";
-    master.commit(new Dir().put("README.md", masterContent.getBytes()), "second commit", ident);
+    master.commit(new Dir().put("README.md", "third".getBytes()), "second commit", ident).addTag("AAAA", "AAAA", ident);
+    Thread.sleep(1000);
     
-    boolean mergeTo = develop.mergeTo(master, ident);
-    assertFalse(mergeTo);
+    List<String> tagnames = new ArrayList<String>();
+    for (Tag tag : repo.listTags()) {
+      tagnames.add(tag.name);
+    }
     
-    // assertArrayEquals(master.head().getDir().file("README.md"), "updated\r\nadded".getBytes());
+    assertTrue(Arrays.asList("ZZZZ", "AAAA").equals(tagnames));
     
     // clean up.
     cleanUp(repo);

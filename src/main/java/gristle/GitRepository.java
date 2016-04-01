@@ -29,6 +29,7 @@ import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.RefUpdate.Result;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.RepositoryBuilder;
+import org.eclipse.jgit.lib.TagBuilder;
 import org.eclipse.jgit.lib.TreeFormatter;
 import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.merge.Merger;
@@ -287,7 +288,7 @@ public class GitRepository {
      * @return
      * @throws IOException
      */
-    public Result commit(Dir add, String message, Ident ident) throws IOException {
+    public Commit commit(Dir add, String message, Ident ident) throws IOException {
       return commit(add, new Dir(), message, ident);
     }
     
@@ -300,7 +301,7 @@ public class GitRepository {
      * @return
      * @throws IOException
      */
-    public Result commit(Dir add, Dir rm, String message, Ident ident) throws IOException {
+    public Commit commit(Dir add, Dir rm, String message, Ident ident) throws IOException {
       PersonIdent personIdent = ident.toPersonIdent();
       
       try (ObjectInserter inserter = this.repo.newObjectInserter()) {
@@ -308,7 +309,7 @@ public class GitRepository {
         ObjectId treeId = inserter.insert(formatter);
         
         Commit head = this.head();
-        List<ObjectId> parentIds = head != null ? Arrays.asList(head.getId()) : Collections.<ObjectId>emptyList();
+        List<ObjectId> parentIds = head != null ? Arrays.asList(head.getObjectId()) : Collections.<ObjectId>emptyList();
         
         CommitBuilder newCommit = new CommitBuilder();
         newCommit.setCommitter(personIdent);
@@ -328,7 +329,7 @@ public class GitRepository {
           this.repo.writeMergeHeads(null);
         }
         
-        return updateResult;
+        return this.head();
       }
     }
     
@@ -340,7 +341,7 @@ public class GitRepository {
      */
     private Result updateTo(ObjectId newCommitId) throws IOException{
       Commit head = this.head();
-      ObjectId oldHeadId = head != null ? head.getId() : ObjectId.zeroId();
+      ObjectId oldHeadId = head != null ? head.getObjectId() : ObjectId.zeroId();
       
       RefUpdate refUpdate = this.repo.updateRef(Constants.R_HEADS + this.name);
       refUpdate.setNewObjectId(newCommitId);
@@ -437,149 +438,276 @@ public class GitRepository {
       return newBranch;
     }
     
+  }
+  
+  /**
+   * Wrapper of RevCommit.
+   */
+  public class Commit implements Comparable<Commit> {
+    private final Repository repo = GitRepository.this.repo;
+    
+    private RevCommit rev;
+    
     /**
-     * Wrapper of RevCommit.
+     * Constructor
+     * @param rev
      */
-    public class Commit {
-      
-      private final Repository repo = Branch.this.repo;
-      
-      private RevCommit rev;
-      
-      /**
-       * Constructor
-       * @param rev
-       */
-      public Commit(RevCommit rev){
-        this.rev = rev;
+    public Commit(RevCommit rev){
+      this.rev = rev;
+    }
+    
+    /**
+     * Constructor
+     * @param objectId
+     * @throws MissingObjectException
+     * @throws IncorrectObjectTypeException
+     * @throws IOException
+     */
+    public Commit(ObjectId objectId) throws MissingObjectException, IncorrectObjectTypeException, IOException {
+      try (RevWalk walk = new RevWalk(this.repo)) {
+        this.rev = walk.parseCommit(objectId);
       }
-      
-      /**
-       * Returns RevId.
-       * @return
-       */
-      public ObjectId getId() {
-        return this.rev.getId();
+    }
+    
+    /**
+     * Constructor
+     * @param objectId
+     * @throws MissingObjectException
+     * @throws IncorrectObjectTypeException
+     * @throws IOException
+     */
+    public Commit(String objectId) throws MissingObjectException, IncorrectObjectTypeException, IOException {
+      try (RevWalk walk = new RevWalk(this.repo)) {
+        this.rev = walk.parseCommit(ObjectId.fromString(objectId));
       }
-      
-      /**
-       * Returns comment.
-       * @return
-       */
-      public String getComment() {
-        return this.rev.getShortMessage();
+    }
+    
+    /**
+     * Returns RevId.
+     * @return
+     */
+    public ObjectId getObjectId() {
+      return this.rev.getId();
+    }
+    
+    /**
+     * Returns comment.
+     * @return
+     */
+    public String getComment() {
+      return this.rev.getShortMessage();
+    }
+    
+    /**
+     * Returns time.
+     * @return
+     */
+    public int getTime(){
+      return this.rev.getCommitTime();
+    }
+    
+    /**
+     * Returns parents.
+     * @return
+     */
+    public List<Commit> getParents() {
+      List<Commit> commits = new ArrayList<Commit>();
+      for(RevCommit commit : rev.getParents()){
+        commits.add(new Commit(commit));
       }
+      return commits;
+    }
+    
+    public void addTag(String name, String message, Ident tagger) throws IOException {
+      TagBuilder tb = new TagBuilder();
+      tb.setTag(name);
+      tb.setMessage(message);
+      tb.setTagger(tagger.toPersonIdent());
+      tb.setObjectId(this.rev);
       
-      /**
-       * Returns parents.
-       * @return
-       */
-      public List<Commit> getParents() {
-        List<Commit> commits = new ArrayList<GitRepository.Branch.Commit>();
-        for(RevCommit commit : rev.getParents()){
-          commits.add(new Commit(commit));
-        }
-        return commits;
-      }
-      
-      /**
-       * Returns structured directories and files.
-       * @return
-       * @throws MissingObjectException
-       * @throws IncorrectObjectTypeException
-       * @throws CorruptObjectException
-       * @throws IOException
-       */
-      public Dir getDir() throws MissingObjectException, IncorrectObjectTypeException, CorruptObjectException, IOException {
-        RevTree tree = this.rev.getTree();
-        
-        Dir root = new Dir();
-        
-        try (TreeWalk treeWalk = new TreeWalk(this.repo)){
-          treeWalk.addTree(tree);
-          this.walkTree(root, treeWalk);
-        }
-        
-        return root;
-      }
-      
-      /**
-       * Walkthrough tree recursively.
-       * @param dir
-       * @param treeWalk
-       * @return
-       * @throws MissingObjectException
-       * @throws IncorrectObjectTypeException
-       * @throws CorruptObjectException
-       * @throws IOException
-       */
-      private Dir walkTree(Dir dir, TreeWalk treeWalk) throws MissingObjectException, IncorrectObjectTypeException, CorruptObjectException, IOException {
-        while (treeWalk.next()){
-          if (treeWalk.isPostChildren()){
-            return dir;
-          }
-          if (treeWalk.isSubtree()){
-            treeWalk.setPostOrderTraversal(true);
-            treeWalk.enterSubtree();
-            dir.put(walkTree(new Dir(treeWalk.getNameString()), treeWalk));
-          }
-          else {
-            dir.put(treeWalk.getNameString(), this.repo.open(treeWalk.getObjectId(0)).getBytes());
-          }
-        }
-        return dir;
-      }
-      
-      /**
-       * List all filepaths of specified revision.
-       * @return
-       * @throws IOException
-       */
-      public List<String> listFiles() throws IOException {
-        List<String> list = new ArrayList<String>();
+      // write the tag object
+      try (ObjectInserter inserter = this.repo.newObjectInserter()) {
+        ObjectId tagId = inserter.insert(tb);
+        inserter.flush();
         
         try (RevWalk revWalk = new RevWalk(this.repo)) {
-          RevCommit commit = this.rev;
-          RevTree tree = revWalk.parseTree(commit.getTree().getId());
-          
-          try (TreeWalk treeWalk = new TreeWalk(this.repo)) {
-            treeWalk.addTree(tree);
-            treeWalk.setRecursive(true);
-            
-            while(treeWalk.next()){
-              list.add(treeWalk.getPathString());
-            }
-          }
-        }
-        
-        return list;
-      }
-      
-      /**
-       * Returns inputstream of file contained by head of this brach.
-       * @param path
-       * @return
-       * @throws IOException
-       * @throws FileNotFoundException
-       */
-      public InputStream getStream(String path) throws IOException, FileNotFoundException {
-        try (RevWalk revWalk = new RevWalk(this.repo)) {
-          RevCommit commit = this.rev;
-          RevTree tree = revWalk.parseTree(commit.getTree().getId());
-          
-          try (TreeWalk treeWalk = new TreeWalk(this.repo)) {
-            treeWalk.addTree(tree);
-            treeWalk.setRecursive(true);
-            treeWalk.setFilter(PathFilter.create(path));
-            if(!treeWalk.next()){
-              throw new FileNotFoundException("Couldnt find file.");
-            }
-            
-            return this.repo.open(treeWalk.getObjectId(0)).openStream();
-          }
+          RefUpdate tagRef = this.repo.updateRef(Constants.R_TAGS + tb.getTag());
+          tagRef.setNewObjectId(tagId);
+          tagRef.setRefLogMessage("tagged " + name, false);
+          tagRef.update(revWalk);
         }
       }
     }
+    
+    /**
+     * Returns structured directories and files.
+     * @return
+     * @throws MissingObjectException
+     * @throws IncorrectObjectTypeException
+     * @throws CorruptObjectException
+     * @throws IOException
+     */
+    public Dir getDir() throws MissingObjectException, IncorrectObjectTypeException, CorruptObjectException, IOException {
+      RevTree tree = this.rev.getTree();
+      
+      Dir root = new Dir();
+      
+      try (TreeWalk treeWalk = new TreeWalk(this.repo)){
+        treeWalk.addTree(tree);
+        this.walkTree(root, treeWalk);
+      }
+      
+      return root;
+    }
+    
+    /**
+     * Walkthrough tree recursively.
+     * @param dir
+     * @param treeWalk
+     * @return
+     * @throws MissingObjectException
+     * @throws IncorrectObjectTypeException
+     * @throws CorruptObjectException
+     * @throws IOException
+     */
+    private Dir walkTree(Dir dir, TreeWalk treeWalk) throws MissingObjectException, IncorrectObjectTypeException, CorruptObjectException, IOException {
+      while (treeWalk.next()){
+        if (treeWalk.isPostChildren()){
+          return dir;
+        }
+        if (treeWalk.isSubtree()){
+          treeWalk.setPostOrderTraversal(true);
+          treeWalk.enterSubtree();
+          dir.put(walkTree(new Dir(treeWalk.getNameString()), treeWalk));
+        }
+        else {
+          dir.put(treeWalk.getNameString(), this.repo.open(treeWalk.getObjectId(0)).getBytes());
+        }
+      }
+      return dir;
+    }
+    
+    /**
+     * List all filepaths of specified revision.
+     * @return
+     * @throws IOException
+     */
+    public List<String> listFiles() throws IOException {
+      List<String> list = new ArrayList<String>();
+      
+      try (RevWalk revWalk = new RevWalk(this.repo)) {
+        RevCommit commit = this.rev;
+        RevTree tree = revWalk.parseTree(commit.getTree().getId());
+        
+        try (TreeWalk treeWalk = new TreeWalk(this.repo)) {
+          treeWalk.addTree(tree);
+          treeWalk.setRecursive(true);
+          
+          while(treeWalk.next()){
+            list.add(treeWalk.getPathString());
+          }
+        }
+      }
+      
+      return list;
+    }
+    
+    /**
+     * Returns inputstream of file contained by head of this brach.
+     * @param path
+     * @return
+     * @throws IOException
+     * @throws FileNotFoundException
+     */
+    public InputStream getStream(String path) throws IOException, FileNotFoundException {
+      try (RevWalk revWalk = new RevWalk(this.repo)) {
+        RevCommit commit = this.rev;
+        RevTree tree = revWalk.parseTree(commit.getTree().getId());
+        
+        try (TreeWalk treeWalk = new TreeWalk(this.repo)) {
+          treeWalk.addTree(tree);
+          treeWalk.setRecursive(true);
+          treeWalk.setFilter(PathFilter.create(path));
+          if(!treeWalk.next()){
+            throw new FileNotFoundException("Couldnt find file.");
+          }
+          
+          return this.repo.open(treeWalk.getObjectId(0)).openStream();
+        }
+      }
+    }
+
+    @Override
+    public int compareTo(Commit other) {
+      return Integer.valueOf(this.getTime()).compareTo(Integer.valueOf(other.getTime()));
+    }
+    
+  }
+  
+  public List<Tag> listTags() throws IOException {
+    List<Tag> tags = new ArrayList<Tag>();
+    try (RevWalk revWalk = new RevWalk(repo)) {
+      Map<String, Ref> refList = repo.getRefDatabase().getRefs(Constants.R_TAGS);
+      for (Ref ref : refList.values()) {
+        tags.add(new Tag(ref));
+      }
+    }
+    
+    Collections.sort(tags);
+    
+    return tags;
+  }
+  
+  public class Tag implements Comparable<Tag> {
+    
+    private final Repository repo = GitRepository.this.repo;
+    
+    public final String name;
+    private Ref ref;
+    
+    public Tag(String name) {
+      this.name = name;
+      this.ref = null;
+    }
+    public Tag(Ref ref) {
+      this.name = ref.getName().substring(Constants.R_TAGS.length());
+      this.ref = ref;
+    }
+    
+    /**
+     * Find head ref
+     * @return
+     * @throws IOException
+     */
+    public Ref getRef() throws IOException {
+      if (this.ref == null){
+        this.ref = this.repo.exactRef(Constants.R_TAGS + this.name);
+      }
+      return this.ref;
+    }
+    
+    /**
+     * Get Commit of this tag
+     * @return
+     * @throws MissingObjectException
+     * @throws IncorrectObjectTypeException
+     * @throws IOException
+     */
+    public Commit getCommit() {
+      Commit commit;
+      try {
+        commit = new Commit(this.ref.getObjectId());
+      } catch (IOException e) {
+        commit = null;
+      }
+      return commit;
+    }
+    
+    @Override
+    public int compareTo(Tag other) {
+      return this.getCommit().compareTo(other.getCommit());
+    }
+    
   }
   
   /** Ident */
