@@ -1,4 +1,4 @@
-package gristle;
+package glitch;
 
 import static org.eclipse.jgit.lib.RefDatabase.ALL;
 
