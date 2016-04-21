@@ -1,49 +1,51 @@
 package gristle;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import gristle.GitRepository.Branch;
 import gristle.GitRepository.Dir;
 import gristle.GitRepository.Ident;
+import gristle.GitRepository.Tag;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
-import org.eclipse.jgit.api.Git;
 import org.junit.Test;
 
 public class RepositoryTest {
   
   private Ident ident = new GitRepository.Ident("Ident", "Ident@Ident.com");
 
-  private File parepareDirectory() {
-    File repoDir = new File(System.getProperty("java.io.tmpdir"), "tmpRepo.git");
-    repoDir.mkdir();
-    return repoDir;
+  private File parepareDirectory(String name) throws Exception {
+    File dir = new File(System.getProperty("java.io.tmpdir"), name);
+    cleanUp(dir);
+    dir.mkdir();
+    return dir;
   }
   
-  private Git prepareGit(File repoDir) throws Exception {
-    return Git.init().setGitDir(repoDir).setBare(true).call();
+  private GitRepository prepareGit(String name) throws Exception {
+    return GitRepository.getInstance(parepareDirectory(name));
   }
   
-  private void cleanUpRepo(Git git) throws Exception {
-    org.apache.commons.io.FileUtils.deleteDirectory(git.getRepository().getDirectory());
+  private void cleanUp(GitRepository repo) throws Exception {
+    cleanUp(repo.getDirectory());
+  }
+  
+  private void cleanUp(File dir) throws Exception {
+    org.apache.commons.io.FileUtils.deleteDirectory(dir);
   }
   
   @Test
   public void commitOnce() throws Exception {
-    File repoDir = parepareDirectory();
-    Git git = prepareGit(repoDir);
-    
-    GitRepository repo = new GitRepository(repoDir, ident).initialize("initial commit");
+    GitRepository repo = prepareGit("commitOnce.git").initialize("initial commit", ident);
     
     Branch master  = repo.branch("master");
     Branch develop = master.createNewBranch("develop");
@@ -51,7 +53,7 @@ public class RepositoryTest {
     Dir root = new Dir();
     String updateContent = "updated";
     root.put("README.md", updateContent.getBytes());
-    develop.commit(root, "test commit");
+    develop.commit(root, "test commit", ident);
     
     InputStream stream = develop.head().getStream("README.md");
     
@@ -67,17 +69,12 @@ public class RepositoryTest {
     assertEquals(Collections.emptyList(), master.head().listFiles());
     
     // clean up.
-    cleanUpRepo(git);
+    cleanUp(repo);
   }
   
   @Test
   public void commitTwice() throws Exception {
-    File repoDir = new File(System.getProperty("java.io.tmpdir"), "commitTwice");
-    
-    Git git = Git.init().setDirectory(repoDir).setBare(false).call();
-    git.close();
-    
-    GitRepository repo = new GitRepository(new File(repoDir, ".git"), ident).initialize("README.md", "initial".getBytes(), "initial commit");
+    GitRepository repo = prepareGit("commitTwice.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
     
     Branch master  = repo.branch("master");
     Branch develop = master.createNewBranch("develop");
@@ -86,7 +83,7 @@ public class RepositoryTest {
     Dir root = new Dir();
     String firstContent = "first";
     root.put("README.md", firstContent.getBytes());
-    develop.commit(root, "first commit");
+    develop.commit(root, "first commit", ident);
     Thread.sleep(1000);
     
     root = new Dir();
@@ -95,7 +92,7 @@ public class RepositoryTest {
     String anotherContent = "another";
     root.put("ANOTHER.md", anotherContent.getBytes());
     root.put("README.md", secondContent.getBytes());
-    develop.commit(root, "second commit");
+    develop.commit(root, "second commit", ident);
     Thread.sleep(1000);
     
     assertEquals(streamToString(develop.head().getStream("README.md")), secondContent);
@@ -104,15 +101,12 @@ public class RepositoryTest {
     assertEquals(streamToString(master.head().getStream("README.md")), "initial");
     
     // clean up.
-    cleanUpRepo(git);
+    cleanUp(repo);
   }
   
   @Test
   public void commitNestedDirectory() throws Exception {
-    File repoDir = parepareDirectory();
-    Git git = prepareGit(repoDir);
-    
-    GitRepository repo = new GitRepository(repoDir, ident).initialize("README.md", "initial".getBytes(), "initial commit");
+    GitRepository repo = prepareGit("commitNested.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
     
     Branch master  = repo.branch("master");
     Branch develop = master.createNewBranch("develop");
@@ -147,7 +141,7 @@ public class RepositoryTest {
     dir2_2.put("1.md", "2_2__1".getBytes());
     dir2_2.put("2.md", "2_2__2".getBytes());
     
-    develop.commit(root, "dirctories commit");
+    develop.commit(root, "dirctories commit", ident);
     
     assertEquals(
       new HashSet<String>(develop.head().listFiles()),
@@ -183,66 +177,55 @@ public class RepositoryTest {
     assertEquals(new String(dir.dir("child2").dir("child2-child2").file("2.md").bytes()), "2_2__2");
     
     // clean up.
-    cleanUpRepo(git);
+    cleanUp(repo);
   }
   
   @Test
   public void commitAndMergeSimple() throws Exception {
-    File repoDir = new File(System.getProperty("java.io.tmpdir"), "commitAndMergeSimple");
-    repoDir.mkdir();
-    
-    Git git = Git.init().setDirectory(repoDir).setBare(false).call();
-    git.close();
-    
-    GitRepository repo = new GitRepository(new File(repoDir, ".git"), ident).initialize("README.md", "initial".getBytes(), "initial commit");
+    GitRepository repo = prepareGit("commitAndMergeSimple.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
     
     Branch master  = repo.branch("master");
     
     Branch develop = master.createNewBranch("develop");
     
     String updateContent = "updated";
-    develop.commit(new Dir().put("README.md", updateContent.getBytes()), "test commit");
+    develop.commit(new Dir().put("README.md", updateContent.getBytes()), "test commit", ident);
     assertEquals(streamToString(develop.head().getStream("README.md")), updateContent);
     
-    develop.mergeTo(master);
+    develop.mergeTo(master, ident);
     
     assertEquals(streamToString(master.head().getStream("README.md")), updateContent);
     assertTrue(develop.exists());
     
     // clean up.
-    cleanUpRepo(git);
+    cleanUp(repo);
   }
   
   @Test
-  public void commitAndMergeConf() throws Exception {
-    File repoDir = new File(System.getProperty("java.io.tmpdir"), "commitAndMergeConf");
-    repoDir.mkdir();
-    
-    Git git = Git.init().setDirectory(repoDir).setBare(false).call();
-    git.close();
-    
-    GitRepository repo = new GitRepository(new File(repoDir, ".git"), ident).initialize("README.md", "initial\r\ncommit".getBytes(), "initial commit");
+  public void tags() throws Exception {
+    GitRepository repo = prepareGit("tags.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
     
     Branch master  = repo.branch("master");
+    Thread.sleep(1000);
     
-    Branch develop = master.createNewBranch("develop");
+    master.commit(new Dir().put("README.md", "first".getBytes()), "first commit", ident).addTag("ZZZZ", "ZZZZ", ident);
+    Thread.sleep(1000);
     
-    String updateContent = "initial\r\ncommit\r\nadded";
-    develop.commit(new Dir().put("README.md", updateContent.getBytes()), "dev commit");
-    assertArrayEquals(develop.head().getDir().file("README.md").bytes(), updateContent.getBytes());
+    master.commit(new Dir().put("README.md", "second".getBytes()), "second commit", ident);
+    Thread.sleep(1000);
     
-    String masterContent = "updated\r\ncommit";
-    master.commit(new Dir().put("README.md", masterContent.getBytes()), "second commit");
+    master.commit(new Dir().put("README.md", "third".getBytes()), "second commit", ident).addTag("AAAA", "AAAA", ident);
+    Thread.sleep(1000);
     
-    System.out.println(new String(master.head().getDir().file("README.md").bytes()));
+    List<String> tagnames = new ArrayList<String>();
+    for (Tag tag : repo.listTags()) {
+      tagnames.add(tag.name);
+    }
     
-    boolean mergeTo = develop.mergeTo(master);
-    assertFalse(mergeTo);
-    
-    // assertArrayEquals(master.head().getDir().file("README.md"), "updated\r\nadded".getBytes());
+    assertTrue(Arrays.asList("ZZZZ", "AAAA").equals(tagnames));
     
     // clean up.
-    cleanUpRepo(git);
+    cleanUp(repo);
   }
   
   private String streamToString(InputStream stream) throws Exception {

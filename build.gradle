@@ -4,6 +4,13 @@ repositories {
 }
 
 apply plugin: "java"
+apply plugin: 'maven'
+
+sourceCompatibility = '1.7'
+targetCompatibility = '1.7'
+
+group = 'com.github.yohei224'
+version = '0.0.1'
 
 dependencies {
   compile 'org.eclipse.jgit:org.eclipse.jgit:+'
@@ -12,4 +19,12 @@ dependencies {
   testCompile 'commons-io:commons-io:2.4'
 }
 
-defaultTasks 'compileJava'
+uploadArchives {
+  repositories {
+    mavenDeployer {
+      repository(url: 'file://C:/Users/P000163/yohei224.github.io')
+    }
+  }
+}
+
+defaultTasks 'jar'
