@@ -2,10 +2,10 @@ package glitch;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import gristle.GitRepository.Branch;
-import gristle.GitRepository.Dir;
-import gristle.GitRepository.Ident;
-import gristle.GitRepository.Tag;
+import glitch.GitRepository.Branch;
+import glitch.GitRepository.Dir;
+import glitch.GitRepository.Ident;
+import glitch.GitRepository.Tag;
 
 import java.io.BufferedReader;
 import java.io.File;
