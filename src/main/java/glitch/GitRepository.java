@@ -371,18 +371,18 @@ public class GitRepository {
      * @throws IOException
      */
     public boolean mergeTo(Branch toBranch, Ident ident) throws IOException {
-      return mergeTo(toBranch, false, ident);
+      return mergeTo(toBranch, ident, false);
     }
 
     /**
      * Merge this branch into another one.
      * @param toBranch
-     * @param delete
      * @param ident
+     * @param delete
      * @return
      * @throws IOException
      */
-    public boolean mergeTo(Branch toBranch, boolean delete, Ident ident) throws IOException {
+    public boolean mergeTo(Branch toBranch, Ident ident, boolean delete) throws IOException {
       PersonIdent personIdent = ident.toPersonIdent();
       ObjectInserter inserter = this.repo.newObjectInserter();
 
