@@ -22,7 +22,7 @@ dependencies {
 uploadArchives {
   repositories {
     mavenDeployer {
-      repository(url: 'file:///home/yohei/uploadJar')
+      repository(url: 'file:///home/yohei/github/yohei224.github.io')
     }
   }
 }

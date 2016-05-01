@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
 
+import org.eclipse.jgit.diff.Sequence;
 import org.eclipse.jgit.errors.AmbiguousObjectException;
 import org.eclipse.jgit.errors.CorruptObjectException;
 import org.eclipse.jgit.errors.IncorrectObjectTypeException;
@@ -37,6 +38,8 @@ import org.eclipse.jgit.lib.TagBuilder;
 import org.eclipse.jgit.lib.TreeFormatter;
 import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.merge.Merger;
+import org.eclipse.jgit.merge.MergeResult;
+import org.eclipse.jgit.merge.ResolveMerger;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
@@ -376,11 +379,27 @@ public class GitRepository {
         Ref toHeadRef = toBranch.findHeadRef();
         RevCommit toCommit = revWalk.parseCommit(toHeadRef.getObjectId());
 
-        this.repo.writeMergeCommitMsg("mergeMessage");
-        this.repo.writeMergeHeads(Arrays.asList(this.repo.exactRef(Constants.HEAD).getObjectId()));
-
         Merger merger = MergeStrategy.RECURSIVE.newMerger(this.repo, true);
         return merger.merge(srcCommit, toCommit);
+      }
+    }
+
+    /**
+     * Tests if this branch has no conflict.
+     * @param toBranch
+     * @return margable
+     * @throws IOException
+     */
+    public Map<String,MergeResult<? extends Sequence>> getConflicts(Branch toBranch) throws IOException {
+      try (RevWalk revWalk = new RevWalk(this.repo)) {
+        RevCommit srcCommit = revWalk.parseCommit(this.findHeadRef().getObjectId());
+
+        Ref toHeadRef = toBranch.findHeadRef();
+        RevCommit toCommit = revWalk.parseCommit(toHeadRef.getObjectId());
+
+        ResolveMerger merger = (ResolveMerger)MergeStrategy.RESOLVE.newMerger(this.repo, true);
+        merger.merge(srcCommit, toCommit);
+        return merger.getMergeResults();
       }
     }
 

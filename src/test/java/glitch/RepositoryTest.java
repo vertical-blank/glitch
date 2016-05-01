@@ -2,6 +2,7 @@ package glitch;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 import glitch.GitRepository.Branch;
 import glitch.GitRepository.Dir;
 import glitch.GitRepository.Ident;
@@ -17,6 +18,10 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
+
+import org.eclipse.jgit.diff.Sequence;
+import org.eclipse.jgit.merge.MergeResult;
 
 import org.junit.Test;
 
@@ -196,6 +201,33 @@ public class RepositoryTest {
     
     assertEquals(streamToString(master.head().getStream("README.md")), updateContent);
     assertTrue(develop.exists());
+    
+    // clean up.
+    cleanUp(repo);
+  }
+  
+  @Test
+  public void mergeConflict() throws Exception {
+    GitRepository repo = prepareGit("mergeConflict.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
+    
+    Branch master  = repo.branch("master");
+    
+    Branch develop = master.createNewBranch("develop");
+    
+    String updateContent = "updated";
+    develop.commit(new Dir().put("README.md", updateContent.getBytes()), "develop commit", ident);
+
+    master.commit(new Dir().put("README.md", "masterConflict".getBytes()), "master commit", ident);
+    
+    boolean mergable = develop.isMergableTo(master);
+    assertFalse(mergable);
+
+    Map<String,MergeResult<? extends Sequence>> result = develop.getConflicts(master);
+    System.out.println(result.size());
+    for(Map.Entry<String,MergeResult<? extends Sequence>> entry : result.entrySet()) {
+      System.out.println(entry.getKey());
+      System.out.println(entry.getValue());
+    }
     
     // clean up.
     cleanUp(repo);
