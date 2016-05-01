@@ -364,14 +364,35 @@ public class GitRepository {
     }
 
     /**
+     * Tests if this branch has no conflict.
+     * @param toBranch
+     * @return margable
+     * @throws IOException
+     */
+    public boolean isMergableTo(Branch toBranch) throws IOException {
+      try (RevWalk revWalk = new RevWalk(this.repo)) {
+        RevCommit srcCommit = revWalk.parseCommit(this.findHeadRef().getObjectId());
+
+        Ref toHeadRef = toBranch.findHeadRef();
+        RevCommit toCommit = revWalk.parseCommit(toHeadRef.getObjectId());
+
+        this.repo.writeMergeCommitMsg("mergeMessage");
+        this.repo.writeMergeHeads(Arrays.asList(this.repo.exactRef(Constants.HEAD).getObjectId()));
+
+        Merger merger = MergeStrategy.RECURSIVE.newMerger(this.repo, true);
+        return merger.merge(srcCommit, toCommit);
+      }
+    }
+
+    /**
      * Merge this branch into another one, and then delete this.
      * @param toBranch
      * @param ident
      * @return
      * @throws IOException
      */
-    public boolean mergeTo(Branch toBranch, Ident ident) throws IOException {
-      return mergeTo(toBranch, ident, false);
+    public void mergeTo(Branch toBranch, Ident ident) throws IOException {
+      mergeTo(toBranch, ident, false);
     }
 
     /**
@@ -382,7 +403,7 @@ public class GitRepository {
      * @return
      * @throws IOException
      */
-    public boolean mergeTo(Branch toBranch, Ident ident, boolean delete) throws IOException {
+    public void mergeTo(Branch toBranch, Ident ident, boolean delete) throws IOException {
       PersonIdent personIdent = ident.toPersonIdent();
       ObjectInserter inserter = this.repo.newObjectInserter();
 
@@ -398,7 +419,7 @@ public class GitRepository {
         Merger merger = MergeStrategy.RECURSIVE.newMerger(this.repo, true);
         boolean merge = merger.merge(srcCommit, toCommit);
         if (!merge) {
-          return false;
+          throw new ConflictException(this.name, toBranch.name);
         }
 
         ObjectId mergeResultTreeId = merger.getResultTreeId();
@@ -419,8 +440,6 @@ public class GitRepository {
         if (delete) {
           this.delete();
         }
-
-        return true;
       }
     }
 
@@ -835,6 +854,15 @@ public class GitRepository {
       return this.loader.getBytes();
     }
 
+  }
+
+  public static class ConflictException extends RuntimeException {
+    public final String from;
+    public final String to;
+    public ConflictException(String from, String to){
+      this.from = from;
+      this.to = to;
+    }
   }
 
 }
