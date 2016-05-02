@@ -427,7 +427,7 @@ public class GitRepository {
           int sequenceIndex = chunk.getSequenceIndex();
           String sourceName = names.get(sequenceIndex);
           
-          String content = ((RawText) sequences.get(sequenceIndex)).getString(chunk.getBegin(), chunk.getEnd(), false);
+          String content = ((RawText) sequences.get(sequenceIndex)).getString(chunk.getBegin(), chunk.getEnd(), true);
           entries.put(sourceName, content);
           
           ConflictState conflictState = chunk.getConflictState();

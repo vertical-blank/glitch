@@ -264,15 +264,15 @@ public class RepositoryTest {
         map(
             pair("BASE", joinLines(
                 "AAAAAAA",
-                "=======", ""))
+                "======="))
         ),
         map(
             pair("master", joinLines(
-                "XXXXXXX", ""))
+                "XXXXXXX"))
         ),
         map(
             pair("BASE", joinLines(
-                "=======", ""))
+                "======="))
         ),
         map(
             pair("develop", joinLines(
@@ -280,19 +280,19 @@ public class RepositoryTest {
                 "2CCCCCC",
                 "3CCCCCC",
                 "4444444",
-                "5555555", "")),
+                "5555555")),
             pair("master", joinLines(
                 "CCCCCC1",
                 "CCCCCC2",
-                "CCCCCC3", ""))
+                "CCCCCC3"))
         ),
         map(
             pair("BASE", joinLines(
-                "=======", ""))
+                "======="))
         ),
         map(
             pair("develop", joinLines(
-                "YYYYYYY", ""))
+                "YYYYYYY"))
         ),
         map(
             pair("BASE", joinLines(
@@ -306,6 +306,18 @@ public class RepositoryTest {
       String fileName = conflict.getKey();
       assertEquals("README.md", fileName);
       List<Map<String, String>> value = conflict.getValue();
+      
+      for (Map<String, String> map : value) {
+        if (map.size() == 1){
+          System.out.println(map.entrySet().iterator().next().getValue());
+        }
+        else {
+          for (Entry<String, String> entry : map.entrySet()) {
+            System.out.println(entry.getKey());
+            System.out.println(entry.getValue());
+          }
+        }
+      }
       
       assertEquals(expected, value);
     }
