@@ -1,8 +1,8 @@
 package glitch;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import glitch.GitRepository.Branch;
 import glitch.GitRepository.Dir;
 import glitch.GitRepository.Ident;
@@ -15,13 +15,12 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Map;
-
-import org.eclipse.jgit.diff.Sequence;
-import org.eclipse.jgit.merge.MergeResult;
+import java.util.Map.Entry;
+import java.util.Set;
 
 import org.junit.Test;
 
@@ -208,29 +207,132 @@ public class RepositoryTest {
   
   @Test
   public void mergeConflict() throws Exception {
-    GitRepository repo = prepareGit("mergeConflict.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
+    String initial = joinLines(
+        "AAAAAAA",
+        "=======",
+        "BBBBBBB",
+        "=======",
+        "CCCCCCC",
+        "CCCCCCC",
+        "CCCCCCC",
+        "=======",
+        "DDDDDDD",
+        "=======",
+        "EEEEEEE");
+    GitRepository repo = prepareGit("mergeConflict.git").initialize("README.md", initial.getBytes(), "initial commit", ident);
     
     Branch master  = repo.branch("master");
     
     Branch develop = master.createNewBranch("develop");
     
-    String updateContent = "updated";
-    develop.commit(new Dir().put("README.md", updateContent.getBytes()), "develop commit", ident);
+    String masterContent = joinLines(
+        "AAAAAAA",
+        "=======",
+        "XXXXXXX",
+        "=======",
+        "CCCCCC1",
+        "CCCCCC2",
+        "CCCCCC3",
+        "=======",
+        "DDDDDDD",
+        "=======",
+        "EEEEEEE");
+    master.commit(new Dir().put("README.md", masterContent.getBytes()), "master commit", ident);
 
-    master.commit(new Dir().put("README.md", "masterConflict".getBytes()), "master commit", ident);
+    String developContent = joinLines(
+        "AAAAAAA",
+        "=======",
+        "BBBBBBB",
+        "=======",
+        "1CCCCCC",
+        "2CCCCCC",
+        "3CCCCCC",
+        "4444444",
+        "5555555",
+        "=======",
+        "YYYYYYY",
+        "=======",
+        "EEEEEEE");
+    develop.commit(new Dir().put("README.md", developContent.getBytes()), "develop commit", ident);
     
     boolean mergable = develop.isMergableTo(master);
     assertFalse(mergable);
-
-    Map<String,MergeResult<? extends Sequence>> result = develop.getConflicts(master);
-    System.out.println(result.size());
-    for(Map.Entry<String,MergeResult<? extends Sequence>> entry : result.entrySet()) {
-      System.out.println(entry.getKey());
-      System.out.println(entry.getValue());
+    
+    List<Map<String, String>> expected = new ArrayList<Map<String,String>>();
+    expected.addAll(
+      Arrays.asList(
+        map(
+            pair("BASE", joinLines(
+                "AAAAAAA",
+                "=======", ""))
+        ),
+        map(
+            pair("master", joinLines(
+                "XXXXXXX", ""))
+        ),
+        map(
+            pair("BASE", joinLines(
+                "=======", ""))
+        ),
+        map(
+            pair("develop", joinLines(
+                "1CCCCCC",
+                "2CCCCCC",
+                "3CCCCCC",
+                "4444444",
+                "5555555", "")),
+            pair("master", joinLines(
+                "CCCCCC1",
+                "CCCCCC2",
+                "CCCCCC3", ""))
+        ),
+        map(
+            pair("BASE", joinLines(
+                "=======", ""))
+        ),
+        map(
+            pair("develop", joinLines(
+                "YYYYYYY", ""))
+        ),
+        map(
+            pair("BASE", joinLines(
+                "=======",
+                "EEEEEEE"))
+        )
+    ));
+    
+    Map<String, List<Map<String, String>>> conflicts = develop.getConflicts(master);
+    for (Entry<String, List<Map<String, String>>> conflict : conflicts.entrySet()) {
+      String fileName = conflict.getKey();
+      assertEquals("README.md", fileName);
+      List<Map<String, String>> value = conflict.getValue();
+      
+      assertEquals(expected, value);
     }
+    
     
     // clean up.
     cleanUp(repo);
+  }
+  
+  private Map<String, String> map(Pair ... pairs) {
+    Map<String, String> map = new HashMap<String, String>();
+    for (Pair pair : pairs) {
+      map.put(pair.k, pair.v);
+    }
+    return map;
+  }
+  
+  private class Pair{
+    final String k;
+    final String v;
+    Pair(String k, String v){
+      this.k = k;
+      this.v = v;
+    }
+  }
+  Pair pair(String k, String v){
+    return new Pair(k, v);
   }
   
   @Test
@@ -258,6 +360,23 @@ public class RepositoryTest {
     
     // clean up.
     cleanUp(repo);
+  }
+  
+  private String joinLines(String ... lines) {
+    StringBuilder sb = new StringBuilder();
+    
+    boolean first = true;
+    for (String line : lines) {
+      if (first) {
+        first = false;
+      }
+      else {
+        sb.append("\n");
+      }
+      sb.append(line);
+    }
+    
+    return sb.toString();
   }
   
   private String streamToString(InputStream stream) throws Exception {

@@ -10,11 +10,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
 
+import org.eclipse.jgit.diff.RawText;
 import org.eclipse.jgit.diff.Sequence;
 import org.eclipse.jgit.errors.AmbiguousObjectException;
 import org.eclipse.jgit.errors.CorruptObjectException;
@@ -36,9 +38,11 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.RepositoryBuilder;
 import org.eclipse.jgit.lib.TagBuilder;
 import org.eclipse.jgit.lib.TreeFormatter;
+import org.eclipse.jgit.merge.MergeChunk;
+import org.eclipse.jgit.merge.MergeChunk.ConflictState;
+import org.eclipse.jgit.merge.MergeResult;
 import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.merge.Merger;
-import org.eclipse.jgit.merge.MergeResult;
 import org.eclipse.jgit.merge.ResolveMerger;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
@@ -390,7 +394,7 @@ public class GitRepository {
      * @return margable
      * @throws IOException
      */
-    public Map<String,MergeResult<? extends Sequence>> getConflicts(Branch toBranch) throws IOException {
+    public Map<String, List<Map<String, String>>> getConflicts(Branch toBranch) throws IOException {
       try (RevWalk revWalk = new RevWalk(this.repo)) {
         RevCommit srcCommit = revWalk.parseCommit(this.findHeadRef().getObjectId());
 
@@ -399,8 +403,50 @@ public class GitRepository {
 
         ResolveMerger merger = (ResolveMerger)MergeStrategy.RESOLVE.newMerger(this.repo, true);
         merger.merge(srcCommit, toCommit);
-        return merger.getMergeResults();
+        
+        return parseConflict(this.name, toBranch.name, merger.getMergeResults());
       }
+    }
+    
+    
+    private Map<String, List<Map<String, String>>> parseConflict(String fromName, String toName, Map<String, MergeResult<? extends Sequence>> mergeResults){
+      List<String> names = Arrays.asList("BASE", fromName, toName);
+      
+      Map<String, List<Map<String, String>>> diffsByFileName = new HashMap<String, List<Map<String, String>>>();
+      
+      for(Map.Entry<String, MergeResult<? extends Sequence>> resultEntry : mergeResults.entrySet()) {
+        MergeResult<? extends Sequence> mergeResult = resultEntry.getValue();
+         
+        List<? extends Sequence> sequences = mergeResult.getSequences();
+        
+        List<Map<String, String>> diffs = new ArrayList<Map<String, String>>();
+        diffsByFileName.put(resultEntry.getKey(), diffs);
+
+        Map<String, String> entries = new HashMap<String, String>();
+        for (MergeChunk chunk : mergeResult) {
+          int sequenceIndex = chunk.getSequenceIndex();
+          String sourceName = names.get(sequenceIndex);
+          
+          String content = ((RawText) sequences.get(sequenceIndex)).getString(chunk.getBegin(), chunk.getEnd(), false);
+          entries.put(sourceName, content);
+          
+          ConflictState conflictState = chunk.getConflictState();
+          switch (conflictState) {
+          case NO_CONFLICT:
+            diffs.add(entries);
+            entries = new HashMap<String, String>();
+            break;
+          case FIRST_CONFLICTING_RANGE:
+            break;
+          case NEXT_CONFLICTING_RANGE:
+            diffs.add(entries);
+            entries = new HashMap<String, String>();
+            break;
+          }
+          
+        }
+      }
+      return diffsByFileName;
     }
 
     /**
@@ -876,6 +922,7 @@ public class GitRepository {
   }
 
   public static class ConflictException extends RuntimeException {
+    private static final long serialVersionUID = -8327407717184612901L;
     public final String from;
     public final String to;
     public ConflictException(String from, String to){
