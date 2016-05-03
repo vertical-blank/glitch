@@ -11,9 +11,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.TreeMap;
 
 import org.eclipse.jgit.diff.RawText;
@@ -197,6 +200,31 @@ public class GitRepository {
     public Branch(String name) {
       this.name = name;
     }
+    
+    public Commit findBranchCommitFrom(Branch from) throws IOException {
+      
+      Set<String> set = new HashSet<String>();
+      for (Commit commit : from.listCommits()) {
+        set.add(commit.getId());
+      }
+      
+      Ref head = this.findHeadRef();
+      try (RevWalk walk = new RevWalk(this.repo)) {
+        RevCommit commit = walk.parseCommit(head.getObjectId());
+        walk.markStart(commit);
+        
+        Iterator<RevCommit> iterator = walk.iterator();
+        RevCommit revCommit = null;
+        while (iterator.hasNext()){
+          RevCommit next = iterator.next();
+          if(set.contains(next.getId().name())) {
+            revCommit = next;
+            break;
+          }
+        }
+        return new Commit(revCommit);
+      }
+    }
 
     /**
      * Returns head of this branch.
@@ -257,7 +285,6 @@ public class GitRepository {
         for (RevCommit rev : walk) {
           revs.add(new Commit(rev));
         }
-        walk.dispose();
 
         return revs;
       }
@@ -562,6 +589,14 @@ public class GitRepository {
     public Commit(RevCommit rev) {
       this.rev = rev;
     }
+    
+    /**
+     * hash of this commit.
+     * @return
+     */
+    public String getId() {
+      return this.getObjectId().name();
+    }
 
     /**
      * Constructor
@@ -764,6 +799,34 @@ public class GitRepository {
     @Override
     public int compareTo(Commit other) {
       return Integer.valueOf(this.getTime()).compareTo(Integer.valueOf(other.getTime()));
+    }
+
+    @Override
+    public int hashCode() {
+      final int prime = 31;
+      int result = 1;
+      result = prime * result + repo.hashCode();
+      result = prime * result + ((rev == null) ? 0 : rev.hashCode());
+      return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj)
+        return true;
+      if (obj == null)
+        return false;
+      if (getClass() != obj.getClass())
+        return false;
+      Commit other = (Commit) obj;
+      if (!repo.equals(other.repo))
+        return false;
+      if (getId() == null) {
+        if (other.getId() != null)
+          return false;
+      } else if (!getId().equals(other.getId()))
+        return false;
+      return true;
     }
 
   }

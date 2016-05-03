@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import glitch.GitRepository.Branch;
+import glitch.GitRepository.Commit;
 import glitch.GitRepository.Dir;
 import glitch.GitRepository.Ident;
 import glitch.GitRepository.Tag;
@@ -307,18 +308,6 @@ public class RepositoryTest {
       assertEquals("README.md", fileName);
       List<Map<String, String>> value = conflict.getValue();
       
-      for (Map<String, String> map : value) {
-        if (map.size() == 1){
-          System.out.println(map.entrySet().iterator().next().getValue());
-        }
-        else {
-          for (Entry<String, String> entry : map.entrySet()) {
-            System.out.println(entry.getKey());
-            System.out.println(entry.getValue());
-          }
-        }
-      }
-      
       assertEquals(expected, value);
     }
     
@@ -346,6 +335,30 @@ public class RepositoryTest {
   Pair pair(String k, String v){
     return new Pair(k, v);
   }
+
+  @Test
+  public void getStartCommit() throws Exception {
+    GitRepository repo = prepareGit("start_commit.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
+    
+    Branch masterBranch = repo.branch("master");
+    
+    masterBranch.commit(new Dir().put("README.md", "m 1".getBytes()), "1 master", ident);
+    Commit master2 = masterBranch.commit(new Dir().put("README.md", "m 2".getBytes()), "2 master", ident);
+    
+    Branch develBranch = masterBranch.createNewBranch("devel");
+    develBranch.commit(new Dir().put("README.md", "d 1".getBytes()), "first devel", ident);
+    develBranch.commit(new Dir().put("README.md", "d 2".getBytes()), "first devel", ident);
+    develBranch.commit(new Dir().put("README.md", "d 3".getBytes()), "first devel", ident);
+    
+    masterBranch.commit(new Dir().put("README.md", "m 3".getBytes()), "3 master", ident);
+    
+    Commit startOfDevel = develBranch.findBranchCommitFrom(masterBranch);
+    
+    assertEquals(master2, startOfDevel);
+    
+    // clean up.
+    cleanUp(repo);
+  }
   
   @Test
   public void tags() throws Exception {
@@ -360,7 +373,7 @@ public class RepositoryTest {
     master.commit(new Dir().put("README.md", "second".getBytes()), "second commit", ident);
     Thread.sleep(1000);
     
-    master.commit(new Dir().put("README.md", "third".getBytes()), "second commit", ident).addTag("AAAA", "AAAA", ident);
+    master.commit(new Dir().put("README.md", "third".getBytes()), "third commit", ident).addTag("AAAA", "AAAA", ident);
     Thread.sleep(1000);
     
     List<String> tagnames = new ArrayList<String>();
