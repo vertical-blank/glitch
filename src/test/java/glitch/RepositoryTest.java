@@ -337,7 +337,7 @@ public class RepositoryTest {
   }
 
   @Test
-  public void getStartCommit() throws Exception {
+  public void findBranchingCommit() throws Exception {
     GitRepository repo = prepareGit("start_commit.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
     
     Branch masterBranch = repo.branch("master");
@@ -355,6 +355,39 @@ public class RepositoryTest {
     Commit startOfDevel = develBranch.findBranchCommitFrom(masterBranch);
     
     assertEquals(master2, startOfDevel);
+    
+    // clean up.
+    cleanUp(repo);
+  }
+
+  @Test
+  public void isBehind() throws Exception {
+    GitRepository repo = prepareGit("is_behind.git").initialize("README.md", "initial".getBytes(), "initial commit", ident);
+    
+    Branch masterBranch = repo.branch("master");
+    
+    masterBranch.commit(masterBranch.head().getDir().put("README.md", "m 1".getBytes()), "1 master", ident);
+    
+    Branch develBranch = masterBranch.createNewBranch("devel");
+    assertFalse(develBranch.isBehind(masterBranch));
+    
+    develBranch.commit(develBranch.head().getDir().put("DEVEL.md", "d 1".getBytes()), "1 devel", ident);
+    assertFalse(develBranch.isBehind(masterBranch));
+    
+    masterBranch.commit(masterBranch.head().getDir().put("README.md", "m 2".getBytes()), "2 master", ident);
+    assertTrue(develBranch.isBehind(masterBranch));
+    
+    masterBranch.mergeTo(develBranch, ident);
+    assertFalse(develBranch.isBehind(masterBranch));
+    
+    develBranch.commit(develBranch.head().getDir().put("DEVEL.md", "d 2".getBytes()), "2 devel", ident);
+    assertFalse(develBranch.isBehind(masterBranch));
+
+    masterBranch.commit(masterBranch.head().getDir().put("README.md", "m 3".getBytes()), "3 master", ident);
+    assertTrue(develBranch.isBehind(masterBranch));
+
+    masterBranch.mergeTo(develBranch, ident);
+    assertFalse(develBranch.isBehind(masterBranch));
     
     // clean up.
     cleanUp(repo);

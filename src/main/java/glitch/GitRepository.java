@@ -202,10 +202,9 @@ public class GitRepository {
     }
     
     public Commit findBranchCommitFrom(Branch from) throws IOException {
-      
-      Set<String> set = new HashSet<String>();
+      Set<String> commitIdsOfFromBranch = new HashSet<String>();
       for (Commit commit : from.listCommits()) {
-        set.add(commit.getId());
+        commitIdsOfFromBranch.add(commit.getId());
       }
       
       Ref head = this.findHeadRef();
@@ -217,13 +216,38 @@ public class GitRepository {
         RevCommit revCommit = null;
         while (iterator.hasNext()){
           RevCommit next = iterator.next();
-          if(set.contains(next.getId().name())) {
+          if(commitIdsOfFromBranch.contains(next.getId().name())) {
             revCommit = next;
             break;
           }
         }
         return new Commit(revCommit);
       }
+    }
+    
+    public Commit findLatestMergedFrom(Branch from) throws IOException {
+      Set<String> commitIdsOfFromBranch = new HashSet<String>();
+      for (Commit commit : from.listCommits()) {
+        commitIdsOfFromBranch.add(commit.getId());
+      }
+      
+      for (Commit commit : this.listCommits()) {
+        for (Commit parent : commit.getParents()) {
+          if (commitIdsOfFromBranch.contains(parent.getId())){
+            return commit;
+          }
+        }
+      }
+      
+      return null;
+    }
+    
+    public boolean isBehind(Branch from) throws IOException {
+      Commit latestMerged = this.findLatestMergedFrom(from);
+      Commit head = from.head();
+      
+      // not(branching point is head OR parents of latestMerged is head)
+      return !(latestMerged.equals(head) || latestMerged.getParents().contains(head));
     }
 
     /**
